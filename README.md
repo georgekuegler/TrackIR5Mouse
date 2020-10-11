@@ -15,7 +15,8 @@ Every loop iteration, a simple linear interpolation between monitor edges determ
 FreePIE is an excellent tool. You might also want to check that out. It is the first piece of software I used to get going quickly.
 Unfortunately, it does not support the Win32 call, SendInput. This is necessary for any pen enabled applications and some UWP applications to register drawing. These applications use the Windows messaging system to get updates about mouse movement within the application window. I believe the common FreePIE function for moving the mouse, SetCursorPosition, does not cause the appropriate Windows messages is to be sent to the target program.
 
+...TODO more on program...
 
 # The Virtual Screen
-
+...TODO explain virtual desktop and the need to translate coordinates...
 Link: (https://docs.microsoft.com/en-us/windows/win32/gdi/the-virtual-screen)
