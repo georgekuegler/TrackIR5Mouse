@@ -4,14 +4,28 @@ import win32api
 import time
 import json
 
+MM_ABSOLUTE_MAX = 65535
 
 class Display():
     def __init__(self):
+        self.index = 0
         # User-specified rotational bounds of the monitor
         self.ROT_left = float()
         self.ROT_top = float()
         self.ROT_right = float()
         self.ROT_bottom = float()
+
+        self.px_left = int()
+        self.px_top = int()
+        self.px_right = int()
+        self.px_bottom = int()
+
+        self.px_abs_left = int()
+        self.px_abs_top = int()
+        self.px_abs_right = int()
+        self.px_abs_bottom = int()    
+        self.x_PxToABS = float()
+        self.y_PxToABS = float()
 
         # Calculated absolutized 16-bit virtual desktop coordinates
         # from Win32 API calls
@@ -22,6 +36,36 @@ class Display():
         self.AD_x_slope = float()
         self.AD_y_slope = float()
 
+    def set_abs_bounds(self, VD_left_offset, VD_top_offset, x_PxToABS, y_PxToABS):
+        self.px_abs_left = self.px_left - VD_left_offset
+        self.px_abs_top = self.px_top - VD_top_offset
+        self.px_abs_right = self.px_right - VD_left_offset
+        self.px_abs_bottom = self.px_bottom - VD_top_offset
+
+        print("Monitor %d APX\nLeft:%s\nRight:%s\nTop:%s\nBottom:%s\n" % (self.index, self.px_abs_left, self.px_abs_right, self.px_abs_top, self.px_abs_bottom))
+        # In a successful version, I can remove the absolute pixel members and just use the calculation below
+        # for debugging purposes, I want to be able to query their values
+
+        self.ABS_left = float(self.px_abs_left) * x_PxToABS
+        self.ABS_top = float(self.px_abs_top) * y_PxToABS
+        self.ABS_right = float(self.px_abs_right) * x_PxToABS
+        self.ABS_bottom = float(self.px_abs_bottom) * y_PxToABS
+
+        rl = self.ROT_left
+        rr = self.ROT_right
+        al = self.ABS_left
+        ar = self.ABS_right
+        self.AD_x_slope = (ar-al)/(rr-rl)
+
+        rt = self.ROT_top
+        rb = self.ROT_bottom
+        at = self.ABS_top
+        ab = self.ABS_bottom
+        self.AD_y_slope = -(at-ab)/(rt-rb)
+        print("Monitor %d ABS\nLeft:%s\nRight:%s\nTop:%s\nBottom:%s\n" % (self.index, self.ABS_left, self.ABS_right, self.ABS_top, self.ABS_bottom))
+
+
+
 # Use the head tracker program to find out pitch and yaw limit
 # Find whatever is comfortable for your head
 # The NPTrackIR program can only send a maximum of 180deg for any rotational parameter
@@ -29,89 +73,6 @@ class Display():
 # SM_CMONITORS: 80
 num_monitors = ctypes.windll.user32.GetSystemMetrics(ctypes.c_int(80))
 print("%d Monitors Found" % num_monitors)
-
-ADS = []
-for i in range(num_monitors):
-    ADS.append(Display())
-
-ADS[1].ROT_Left = -63.00
-ADS[1].ROT_Right = 63.00
-ADS[1].ROT_Top = 0.45*ADS[1].ROT_Right
-ADS[1].ROT_Bottom = -0.45*ADS[1].ROT_Right
-'''
-ADS[2].ROT_Left = -130.00
-ADS[2].ROT_Right = -77.00
-ADS[2].ROT_Top = 0.45*ADS[1].ROT_Right*1.5
-ADS[2].ROT_Bottom = -0.45*ADS[1].ROT_Right
-'''
-ADS[0].ROT_Left = 90.00
-ADS[0].ROT_Right = 170
-ADS[0].ROT_Top = -20.00
-ADS[0].ROT_Bottom = -55.00
-'''
-ADS[0].ROT_Left = -63.00
-ADS[0].ROT_Right = 63.00
-ADS[0].ROT_Top = 0.45*ADS[0].ROT_Right
-ADS[0].ROT_Bottom = -0.45*ADS[0].ROT_Right
-
-ADS[1].ROT_Left = -130.00
-ADS[1].ROT_Right = -77.00
-ADS[1].ROT_Top = 0.45*ADS[0].ROT_Right*1.5
-ADS[1].ROT_Bottom = -0.45*ADS[0].ROT_Right
-'''
-# Padding in units of pixels
-left_padding = 0
-right_padding = 3
-top_padding = 0
-bottom_padding = 0
-
-# --------------------------------------
-# Get each monitors bounds on the virtual desktop and other info
-monitors = win32api.EnumDisplayMonitors()
-
-monitor_info = {}
-for i in range(len(monitors)):
-    monitor_info[i] = win32api.GetMonitorInfo(monitors[i][0])
-
-# --------------------------------------
-# Find the top left offset from the primary monitor top left corner (always at 0,0)
-# to the virtual desktop top left corner (can be negative)
-#               0    1   2     3
-#             Left Top Right Bottom
-#  'Monitor': (1920, 0, 3456, 864)
-
-VD_left_offset = 0
-VD_top_offset = 0
-for i in range(len(monitor_info)):
-    left = monitor_info[i]["Monitor"][0]
-    top = monitor_info[i]["Monitor"][1]
-    right = monitor_info[i]["Monitor"][2]
-    bottom = monitor_info[i]["Monitor"][3]
-    if left < VD_left_offset:
-        VD_left_offset = left 
-    if top < VD_top_offset:
-        VD_top_offset = top
-    
-    print(monitor_info[i])
-    print("Monitor %d Extents--> L:%d, T:%d, R:%d, B:%d" % (i, left, top, right, bottom))
-
-print("Virtual Desktop Offset From Main: %s, %s" % (VD_left_offset, VD_top_offset))
-
-# --------------------------------------
-# Translation to absolute px coordinate
-# Subtract the x-plane VM offset
-# Subtract the y-plane VM offset
-VM_displays = {}
-for i in range(len(monitor_info)):
-    VM_displays[i] = {"left":"", "top":"", "right":"", "bottom":""}   
-    VM_displays[i]["left"] = monitor_info[i]["Monitor"][0] - VD_left_offset
-    VM_displays[i]["top"] = monitor_info[i]["Monitor"][1] - VD_top_offset
-    VM_displays[i]["right"] = monitor_info[i]["Monitor"][2] - VD_left_offset
-    VM_displays[i]["bottom"] = monitor_info[i]["Monitor"][3] - VD_top_offset
-
-# --------------------------------------
-# Scaling transformation to absolute 65,535 coordinates
-# This is used for the SendInput API call with the absolute coordinates flag set
 # SM_XVIRTUALSCREEN: 78 ; gets the width of the virtual desktopin pixels
 VM_width = ctypes.windll.user32.GetSystemMetrics(ctypes.c_int(78))
 print("Width of VM_desktop: %s" % VM_width)
@@ -119,43 +80,64 @@ print("Width of VM_desktop: %s" % VM_width)
 VM_height = ctypes.windll.user32.GetSystemMetrics(ctypes.c_int(79))
 print("Height of VM_desktop: %s" % VM_height)
 
-x_PxToABS = 65535.00/VM_width
-y_PxToABS = 65535.00/VM_height
-for i in range(len(monitor_info)):
-    ADS[i].ABS_Left = VM_displays[i]["left"] * x_PxToABS
-    ADS[i].ABS_Top = VM_displays[i]["top"] * y_PxToABS
-    ADS[i].ABS_Right = VM_displays[i]["right"] * x_PxToABS
-    ADS[i].ABS_Bottom = VM_displays[i]["bottom"] * y_PxToABS
+ADS = []
+for i in range(num_monitors):
+    ADS.append(Display())
 
-# Find 
-for i in range(len(ADS)):
-    rl = ADS[i].ROT_Left
-    rr = ADS[i].ROT_Right
-    al = ADS[i].ABS_Left
-    ar = ADS[i].ABS_Right
-    ADS[i].AD_x_slope = (ar-al)/(rr-rl)
-    print("Monitor %s Proportional ADx: %s" % (i, ADS[i].AD_x_slope))
-    rt = ADS[i].ROT_Top
-    rb = ADS[i].ROT_Bottom
-    at = ADS[i].ABS_Top
-    ab = ADS[i].ABS_Bottom
-    ADS[i].AD_y_slope = -(at-ab)/(rt-rb)
-    print("Monitor %s Proportional ADy: %s" % (i, ADS[i].AD_y_slope))
+# --------------------------------------
+# Find the top left offset from the primary monitor top left corner (always at 0,0)
+# to the virtual desktop top left corner (can be negative)
+#               0    1   2     3
+#             Left Top Right Bottom
+#  'Monitor': (1920, 0, 3456, 864)
+VD_left_offset = 0
+VD_top_offset = 0
+for i,m in enumerate(win32api.EnumDisplayMonitors()):
+    info = win32api.GetMonitorInfo(m[0])
+    ADS[i].index = i
+    ADS[i].px_left = left = info["Monitor"][0]
+    ADS[i].px_top = top = info["Monitor"][1]
+    ADS[i].px_right = right = info["Monitor"][2]
+    ADS[i].px_bottom = bottom = info["Monitor"][3]
+    if left < VD_left_offset:
+        VD_left_offset = left 
+    if top < VD_top_offset:
+        VD_top_offset = top
+    print("Monitor %d Extents--> L:%d, T:%d, R:%d, B:%d" % (i, left, top, right, bottom))
+
+print("Virtual Desktop Offset From Main Monitor--> Left:%s, Top:%s\n" % (VD_left_offset, VD_top_offset))
+
+ADS[1].ROT_left = -63.00
+ADS[1].ROT_right = 63.00
+ADS[1].ROT_top = 0.45*ADS[1].ROT_right
+ADS[1].ROT_bottom = -0.45*ADS[1].ROT_right
+'''
+ADS[2].ROT_left = -130.00
+ADS[2].ROT_right = -77.00
+ADS[2].ROT_top = 0.45*ADS[1].ROT_right*1.5
+ADS[2].ROT_bottom = -0.45*ADS[1].ROT_right
+'''
+ADS[0].ROT_right = -80.00
+ADS[0].ROT_left = -160.00
+ADS[0].ROT_top = -16.00
+ADS[0].ROT_bottom = -55.00
+
+# Padding in units of pixels
+left_padding = 0
+right_padding = 3
+top_padding = 0
+bottom_padding = 0
+
+x_PxToABS = MM_ABSOLUTE_MAX / float(VM_width);
+print("x_PxToABS: %f" % x_PxToABS);
+y_PxToABS = MM_ABSOLUTE_MAX / float(VM_height);
+print("y_PxToABS: %f\n" % y_PxToABS);
+
+for m in ADS:
+    m.set_abs_bounds(VD_left_offset, VD_top_offset, x_PxToABS, y_PxToABS)
 
 # C struct redefinitions 
 PUL = ctypes.POINTER(ctypes.c_ulong)
-
-class KeyBdInput(ctypes.Structure):
-    _fields_ = [("wVk", ctypes.c_ushort),
-                ("wScan", ctypes.c_ushort),
-                ("dwFlags", ctypes.c_ulong),
-                ("time", ctypes.c_ulong),
-                ("dwExtraInfo", PUL)]
-
-class HardwareInput(ctypes.Structure):
-    _fields_ = [("uMsg", ctypes.c_ulong),
-                ("wParamL", ctypes.c_short),
-                ("wParamH", ctypes.c_ushort)]
 
 class MouseInput(ctypes.Structure):
     _fields_ = [("dx", ctypes.c_long),
@@ -166,9 +148,7 @@ class MouseInput(ctypes.Structure):
                 ("dwExtraInfo", PUL)]
 
 class Input_I(ctypes.Union):
-    _fields_ = [("ki", KeyBdInput),
-                 ("mi", MouseInput),
-                 ("hi", HardwareInput)]
+    _fields_ = [("mi", MouseInput)]
 
 class Input(ctypes.Structure):
     _fields_ = [("type", ctypes.c_ulong),
@@ -198,14 +178,14 @@ def MouseMove(yaw, pitch):
 
     # The return statement is never reached if the head is pointing outside the bounds of any of the screens
     for i in range(len(ADS)):
-        if yaw > ADS[i].ROT_Left and yaw < ADS[i].ROT_Right and \
-           pitch < ADS[i].ROT_Top and pitch > ADS[i].ROT_Bottom: 
-            rl = ADS[i].ROT_Left
-            al = ADS[i].ABS_Left
+        if yaw > ADS[i].ROT_left and yaw < ADS[i].ROT_right and \
+           pitch < ADS[i].ROT_top and pitch > ADS[i].ROT_bottom: 
+            rl = ADS[i].ROT_left
+            al = ADS[i].ABS_left
             mx = ADS[i].AD_x_slope
             x = mx*(yaw-rl) + al
-            rt = ADS[i].ROT_Top
-            at = ADS[i].ABS_Top
+            rt = ADS[i].ROT_top
+            at = ADS[i].ABS_top
             my = ADS[i].AD_y_slope
             y = my*(rt-pitch) + at
             MouseMoveAbsolute(int(x), int(y))
@@ -214,22 +194,22 @@ def MouseMove(yaw, pitch):
     # If the head is pointing outside of the bounds of a screen the mouse should snap to the breached edge
     # It could either be the pitch or the yaw axis that is too great or too little
     # To do this assume the pointer came from the last screen, just asign the mouse position to the absolute limit from the screen it came from
-    if yaw < ADS[last_screen].ROT_Left:
-        x = ADS[last_screen].ABS_Left + left_padding*x_PxToABS
-    elif yaw > ADS[last_screen].ROT_Right: 
-        x = ADS[last_screen].ABS_Right - right_padding*x_PxToABS
+    if yaw < ADS[last_screen].ROT_left:
+        x = ADS[last_screen].ABS_left + left_padding*x_PxToABS
+    elif yaw > ADS[last_screen].ROT_right: 
+        x = ADS[last_screen].ABS_right - right_padding*x_PxToABS
     else: # I have copied the code from above, this is the easiest and fastest way I found so far
-        rl = ADS[last_screen].ROT_Left
-        al = ADS[last_screen].ABS_Left
+        rl = ADS[last_screen].ROT_left
+        al = ADS[last_screen].ABS_left
         mx = ADS[last_screen].AD_x_slope
         x = mx*(yaw-rl) + al
-    if pitch > ADS[last_screen].ROT_Top: 
-        y = ADS[last_screen].ABS_Top + top_padding*y_PxToABS
-    elif pitch < ADS[last_screen].ROT_Bottom: 
-        y = ADS[last_screen].ABS_Bottom - bottom_padding*y_PxToABS
+    if pitch > ADS[last_screen].ROT_top: 
+        y = ADS[last_screen].ABS_top + top_padding*y_PxToABS
+    elif pitch < ADS[last_screen].ROT_bottom: 
+        y = ADS[last_screen].ABS_bottom - bottom_padding*y_PxToABS
     else: # I have copied the code from above, this is the easiest and fastest way I found so far
-        rt = ADS[last_screen].ROT_Top
-        at = ADS[last_screen].ABS_Top
+        rt = ADS[last_screen].ROT_top
+        at = ADS[last_screen].ABS_top
         my = ADS[last_screen].AD_y_slope
         y = my*(rt-pitch) + at
     MouseMoveAbsolute(int(x), int(y))
