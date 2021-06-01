@@ -1,4 +1,4 @@
-# TrackIR5Mouse
+# TrackIR5PyMouse
 
 This program controls the mouse using pitch and yaw data from the Natural Point TrackIR5.
 Rotational coordinates are mapped to the Windows virtual desktop in an absolute fashion, so the mouse always moves to where the user is looking.
